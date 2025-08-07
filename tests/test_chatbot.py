@@ -11,4 +11,4 @@ if __name__ == "__main__":
     )
     general_agent.llm.provider = "gemini"
     chatbot = Chatbot(client=general_agent)
-    chatbot.cli_run()
+    chatbot.cli_run(stream=True)

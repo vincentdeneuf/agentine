@@ -1,10 +1,10 @@
 import json
-from typing import List, Optional, Dict, Any
+from typing import AsyncIterator, Iterator, List, Optional, Dict, Any, Tuple
 from pydantic import BaseModel, Field
 from typing_extensions import Literal
 import asyncio
-from .llm import LLM, Message
-from .utils import Utility
+from pyagentix.llm import LLM, Message
+from pyagentix.utils import Utility
 
 class AgentUnit(BaseModel):
     instruction: str
@@ -100,6 +100,26 @@ class AgentUnit(BaseModel):
 
         return result
 
+    def stream(
+        self,
+        query: Optional[str] = None,
+        messages: Optional[List[Message]] = None,
+        data: Optional[Dict[str, Any]] = None,
+        group_mode: bool = False,
+    ) -> Iterator[Message]:
+        chat_messages = self._prepare_messages(query=query, messages=messages, data=data, group_mode=group_mode)
+        return self.llm.stream(chat_messages)
+
+    async def stream_async(
+        self,
+        query: Optional[str] = None,
+        messages: Optional[List[Message]] = None,
+        data: Optional[Dict[str, Any]] = None,
+        group_mode: bool = False,
+    ) -> AsyncIterator[Message]:
+        chat_messages = self._prepare_messages(query=query, messages=messages, data=data, group_mode=group_mode)
+        async for message in self.llm.stream_async(chat_messages):
+            yield message
 
 class AgentGroup(BaseModel):
     agents: List[AgentUnit] = Field(default_factory=list)
@@ -181,11 +201,14 @@ class AgentLegion(BaseModel):
     selector: AgentUnit
     agent_index: AgentIndex
 
-    def work(
+    def _prepare_messages(
         self,
         query: Optional[str] = None,
-        messages: Optional[List[Message]] = [],
-    ) -> Message:
+        messages: Optional[List[Message]] = None,
+    ) -> Tuple[List[Message], Optional[AgentUnit]]:
+        if messages is None:
+            messages = []
+
         selector_result = self.selector.work(query=query, messages=messages)
 
         assert selector_result.data is not None, "Selector result missing data."
@@ -197,7 +220,7 @@ class AgentLegion(BaseModel):
         selected_agents = self.agent_index.find(selections)
 
         if len(selected_agents) == 1:
-            return selected_agents[0].work(query=query, messages=messages)
+            return messages, selected_agents[0]
 
         agent_group = AgentGroup(agents=selected_agents)
 
@@ -213,5 +236,29 @@ class AgentLegion(BaseModel):
             print()
             messages.append(result)
 
-        speaker_result = self.speaker.work(messages=messages)
-        return speaker_result
+        return messages, None
+
+    def work(
+        self,
+        query: Optional[str] = None,
+        messages: Optional[List[Message]] = None,
+    ) -> Message:
+        messages, single_agent = self._prepare_messages(query=query, messages=messages)
+
+        if single_agent is not None:
+            return single_agent.work(query=query, messages=messages)
+
+        return self.speaker.work(messages=messages)
+
+    def stream(
+        self,
+        query: Optional[str] = None,
+        messages: Optional[List[Message]] = None,
+    ) -> Iterator[Message]:
+        messages, single_agent = self._prepare_messages(query=query, messages=messages)
+
+        if single_agent is not None:
+            yield from single_agent.stream(query=query, messages=messages)
+            return
+
+        yield from self.speaker.stream(messages=messages)

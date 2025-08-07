@@ -1,21 +1,21 @@
-from typing import Dict, Any, Optional, List, Union, Literal
+from typing import Dict, Any, Optional, List, Union, Literal, Iterator, AsyncIterator
 from pydantic import BaseModel, Field, PrivateAttr
 from openai import OpenAI, AsyncOpenAI
-from openai.types.chat import ChatCompletion
-from .metadata import Metadata
-from .utils import Utility
+from openai.types.chat import ChatCompletion, ChatCompletionChunk
+
 import base64
 import mimetypes
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
-DEFAULT_LLM_PROVIDER = "groq"
+from pyagentix.metadata import Metadata
+from pyagentix.utils import Utility
+from pyagentix.config import DEFAULT_LLM_PROVIDER
 
-# You should import or define LLM_PROVIDERS, GROQ_MODELS, OPENAI_MODELS, etc. here or in a config module
 
 class Message(BaseModel):
-    role: Literal["system", "developer", "user", "assistant", "tool"] = "user"
-    content: str
+    role: Optional[Literal["system", "developer", "user", "assistant", "tool"]] = "user"
+    content: Optional[Union[str, List[Dict[str, Any]]]] = None
     data: Optional[Any] = None
     choice_stats: Optional[Dict[str, Any]] = None
     completion_stats: Optional[Dict[str, Any]] = None
@@ -35,12 +35,13 @@ class Message(BaseModel):
 
     @classmethod
     def from_openai_completion(cls, completion: ChatCompletion) -> "Message":
-        completion_dict = completion.model_dump()
+        completion_dict = completion.model_dump() if hasattr(completion, "model_dump") else dict(completion)
         choices = completion_dict.pop("choices", [])
         choice_dict = choices[0] if choices else {}
         message = choice_dict.get("message", {})
         content = message.pop("content", "") if isinstance(message, dict) else ""
-        role = message.pop("role", "user") if isinstance(message, dict) else "user"
+        message.pop("role")
+        role = "assistant"
 
         return cls(
             content=content,
@@ -48,6 +49,26 @@ class Message(BaseModel):
             choice_stats=choice_dict,
             completion_stats=completion_dict,
         )
+
+    @classmethod
+    def from_openai_completion_chunk(cls, chunk: "ChatCompletionChunk") -> "Message":
+        chunk_dict = chunk.model_dump() if hasattr(chunk, "model_dump") else dict(chunk)
+        choices = chunk_dict.pop("choices", [])
+        choice_dict = choices[0] if choices else {}
+        delta = choice_dict.get("delta", {})
+        content = delta.pop("content", "") if isinstance(delta, dict) else ""
+        delta.pop("role")
+        role = "assistant"
+
+        message = cls(
+            role=role,
+            content=content,
+            choice_stats=choice_dict,
+            completion_stats=chunk_dict,
+        )
+        message.metadata.is_chunk = True
+
+        return message
 
 
 class FileMessage(Message):
@@ -94,6 +115,32 @@ class FileMessage(Message):
     def core(self) -> dict:
         return {"role": self.role, "content": self.content}
 
+    @staticmethod
+    def from_terminal(text: str = "") -> "FileMessage":
+        file_path = Utility.get_file_path_via_terminal()
+        if not file_path:
+            raise ValueError("No file selected")
+
+        with open(file_path, "rb") as f:
+            file_bytes = f.read()
+
+        filename = file_path.split("/")[-1]
+        mime_type, _ = mimetypes.guess_type(filename)
+        if mime_type is None:
+            mime_type = "application/octet-stream"
+
+        b64_str = base64.b64encode(file_bytes).decode("utf-8")
+        data_url = f"data:{mime_type};base64,{b64_str}"
+
+        files_list = [
+            {
+                "filename": filename,
+                "data_url": data_url,
+                "mime_type": mime_type,
+            }
+        ]
+
+        return FileMessage(text=text, files=files_list)
 
 class LLM(BaseModel):
     class Config(BaseModel):
@@ -135,7 +182,7 @@ class LLM(BaseModel):
         self._init_clients()
 
     def _init_clients(self) -> None:
-        from .config import LLM_PROVIDERS  # import here to avoid circular import
+        from pyagentix.config import LLM_PROVIDERS  # import here to avoid circular import
 
         provider_config = LLM_PROVIDERS.get(self._provider.lower())
 
@@ -249,3 +296,36 @@ class LLM(BaseModel):
         tasks = [process_message_async(messages) for messages in batch_messages]
         results: List[Union["Message", Exception]] = await asyncio.gather(*tasks, return_exceptions=True)
         return results
+    
+    def stream(self, messages: List["Message"]) -> Iterator["Message"]:
+        assert isinstance(messages, list) and all(isinstance(m, Message) for m in messages), \
+            f"messages must be a list of Message objects. Value: {messages}"
+
+        openai_messages = [m.core() for m in messages]
+
+        kwargs = self.config.core()
+        kwargs["model"] = self.model
+        kwargs["messages"] = openai_messages
+        kwargs["stream"] = True
+
+        stream = self.client.chat.completions.create(**kwargs)
+
+        for chunk in stream:
+            yield Message.from_openai_completion_chunk(chunk)
+
+    async def stream_async(self, messages: List["Message"]) -> AsyncIterator["Message"]:
+        assert isinstance(messages, list) and all(isinstance(m, Message) for m in messages), \
+            f"messages must be a list of Message objects. Value: {messages}"
+
+        openai_messages = [m.core() for m in messages]
+
+        kwargs = self.config.core()
+        kwargs["model"] = self.model
+        kwargs["messages"] = openai_messages
+        kwargs["stream"] = True
+
+        stream = await self.client_async.chat.completions.create(**kwargs)
+
+        async for chunk in stream:
+            yield Message.from_openai_completion_chunk(chunk)
+        

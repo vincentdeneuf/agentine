@@ -1,6 +1,8 @@
 import re
 import textwrap
 from typing import Dict, Any, Literal, Optional, List, Union
+import tkinter as tk
+from tkinter import filedialog
 
 class Utility:
     ANSI_COLORS = {
@@ -48,7 +50,8 @@ class Utility:
         color: Literal[
             "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
             "orange", "purple", "pink", "brown", "gray"
-        ] = "orange"
+        ] = "orange",
+        **kwargs
     ) -> None:
         wrapped_lines = []
         for line in text.splitlines():
@@ -62,8 +65,17 @@ class Utility:
         reset = Utility.ANSI_COLORS["reset"]
 
         for line in wrapped_lines:
-            print(f"{ansi_color}{line}{reset}")
+            print(f"{ansi_color}{line}{reset}", **kwargs)
 
+    @staticmethod
+    def get_file_path_via_terminal() -> Optional[str]:
+        root = tk.Tk()
+        root.withdraw()
+        file_path = filedialog.askopenfilename()
+        root.destroy()
+        if file_path == "":
+            return None
+        return file_path
 
 class ObjectService:
     @staticmethod
