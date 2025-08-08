@@ -1,4 +1,3 @@
-import pytest
 from pyagentix.agent import AgentUnit
 from pyagentix.chatbot import Chatbot
 from pyagentix.llm import LLM
