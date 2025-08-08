@@ -2,10 +2,10 @@ import json
 from typing import AsyncIterator, Iterator, List, Optional, Dict, Any, Tuple, Literal
 from pydantic import BaseModel, Field
 import asyncio
-from pyagentix.llm import LLM, Message
-from pyagentix.utils import Utility
+from agentine.llm import LLM, Message
+from agentine.utils import Utility
 
-class AgentUnit(BaseModel):
+class Agent(BaseModel):
     instruction: str
     group_instruction: Optional[str] = None
     llm: LLM = Field(default_factory=LLM)
@@ -121,7 +121,7 @@ class AgentUnit(BaseModel):
             yield message
 
 class AgentGroup(BaseModel):
-    agents: List[AgentUnit] = Field(default_factory=list)
+    agents: List[Agent] = Field(default_factory=list)
 
     def work(
         self,
@@ -166,13 +166,13 @@ class AgentGroup(BaseModel):
 
 
 class AgentIndex(BaseModel):
-    agents: Dict[str, AgentUnit] = Field(default_factory=dict)
-    default: Optional[AgentUnit] = None
+    agents: Dict[str, Agent] = Field(default_factory=dict)
+    default: Optional[Agent] = None
 
-    def __getitem__(self, key: str) -> AgentUnit:
+    def __getitem__(self, key: str) -> Agent:
         return self.agents[key]
 
-    def add(self, name: str, agent: AgentUnit, is_default: bool = False) -> None:
+    def add(self, name: str, agent: Agent, is_default: bool = False) -> None:
         self.agents[name] = agent
         if is_default:
             self.default = agent
@@ -191,20 +191,20 @@ class AgentIndex(BaseModel):
             raise KeyError(f"Agent '{name}' not found in the index.")
         self.default = self.agents[name]
 
-    def find(self, names: List[str]) -> List[AgentUnit]:
+    def find(self, names: List[str]) -> List[Agent]:
         return [agent for name in names if (agent := self.agents.get(name)) is not None]
 
 
 class AgentLegion(BaseModel):
-    speaker: AgentUnit
-    selector: AgentUnit
+    speaker: Agent
+    selector: Agent
     agent_index: AgentIndex
 
     def _prepare_messages(
         self,
         query: Optional[str] = None,
         messages: Optional[List[Message]] = None,
-    ) -> Tuple[List[Message], Optional[AgentUnit]]:
+    ) -> Tuple[List[Message], Optional[Agent]]:
         if messages is None:
             messages = []
 

@@ -8,9 +8,9 @@ import mimetypes
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
-from pyagentix.metadata import Metadata
-from pyagentix.utils import Utility
-from pyagentix.config import DEFAULT_LLM_PROVIDER
+from agentine.metadata import Metadata
+from agentine.utils import Utility
+from agentine.config import DEFAULT_LLM_PROVIDER
 
 
 class Message(BaseModel):
@@ -182,7 +182,7 @@ class LLM(BaseModel):
         self._init_clients()
 
     def _init_clients(self) -> None:
-        from pyagentix.config import LLM_PROVIDERS  # import here to avoid circular import
+        from agentine.config import LLM_PROVIDERS  # import here to avoid circular import
 
         provider_config = LLM_PROVIDERS.get(self._provider.lower())
 

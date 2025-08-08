@@ -1,13 +1,13 @@
-# PyAgentix
+# agentine
 
-PyAgentix is a Python framework to build AI agents and chatbots using large language models (LLMs). It supports agents, groups of agents, synchronous and asynchronous calls, JSON and text responses, and includes a basic CLI chatbot.
+agentine is a Python framework to build AI agents and chatbots using large language models (LLMs). It supports agents, groups of agents, synchronous and asynchronous calls, JSON and text responses, and includes a basic CLI chatbot.
 
 ---
 
 ## Installation
 
 ```bash
-pip install pyagentix
+pip install agentine
 ```
 
 *Note:* This package requires Python 3.8+.
@@ -28,9 +28,9 @@ pip install pyagentix
 ### 1. Create and use a text response agent
 
 ```python
-from pyagentix.agent import AgentUnit
+from agentine.agent import Agent
 
-agent = AgentUnit(
+agent = Agent(
     instruction="You are a helpful assistant."
 )
 agent.llm.provider = "openai"
@@ -44,9 +44,9 @@ print("Text response:", response.content)
 ### 2. Create and use a JSON response agent
 
 ```python
-from pyagentix.agent import AgentUnit
+from agentine.agent import Agent
 
-json_agent = AgentUnit(
+json_agent = Agent(
     instruction=(
         "You are a helpful assistant. Always respond with a JSON object "
         "with exactly two keys: 'first_name' and 'last_name'."
@@ -76,10 +76,10 @@ print("Async text response:", text_response.content)
 ### 4. Run the CLI chatbot
 
 ```python
-from pyagentix.agent import AgentUnit
-from pyagentix.chatbot import Chatbot
+from agentine.agent import Agent
+from agentine.chatbot import Chatbot
 
-agent = AgentUnit(
+agent = Agent(
     instruction="You are a helpful assistant."
 )
 agent.llm.provider = "openai"
@@ -92,7 +92,7 @@ chatbot.cli_run()
 
 ## Configuration
 
-PyAgentix reads API keys from environment variables by default:
+agentine reads API keys from environment variables by default:
 
 - `OPENAI_API_KEY`
 - `GROQ_API_KEY`

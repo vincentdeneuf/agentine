@@ -1,8 +1,8 @@
 from typing import List, Any
 from pydantic import BaseModel, Field
-from pyagentix.llm import Message, FileMessage
-from pyagentix.utils import Utility
-from pyagentix.agent import AgentUnit
+from agentine.llm import Message, FileMessage
+from agentine.utils import Utility
+from agentine.agent import Agent
 
 class Chatbot(BaseModel):
     client: Any
@@ -32,7 +32,7 @@ class Chatbot(BaseModel):
                 print("BOT: ", end="", flush=True)
                 accumulated_content = ""
                 for chunk in self.client.stream(messages=self.messages):
-                    if chunk.content:
+                    if chunk.content is not None:
                         Utility.print2(chunk.content, color = "green", end="", flush=True)
                         accumulated_content += chunk.content
                 print("\n")
