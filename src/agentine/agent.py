@@ -14,7 +14,7 @@ class Agent(BaseModel):
 
     def __init__(self, **data: Any) -> None:
         super().__init__(**data)
-        self.llm.config.response_format = self.response_format
+        self.llm.response_format = self.response_format
 
     def _prepare_messages(
         self,

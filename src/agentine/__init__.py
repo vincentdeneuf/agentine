@@ -5,7 +5,7 @@ from agentine.chatbot import Chatbot
 from agentine.metadata import Metadata, ChangeLog
 from .config import (
     DEFAULT_LLM_PROVIDER,
-    LLM_PROVIDERS,
+    KNOWN_LLM_PROVIDERS,
     GROQ_MODELS,
     OPENAI_MODELS,
     GEMINI_MODELS,

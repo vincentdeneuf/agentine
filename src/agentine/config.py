@@ -43,7 +43,7 @@ PERPLEXITY_MODELS = {
     "SONAR_PRO": "sonar-pro",
 }
 
-LLM_PROVIDERS = {
+KNOWN_LLM_PROVIDERS = {
     "openai": {
         "api_key": OPENAI_API_KEY,
         "base_url": OPENAI_BASE_URL,

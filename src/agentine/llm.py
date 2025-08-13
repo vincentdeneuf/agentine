@@ -2,7 +2,6 @@ from typing import Dict, Any, Optional, List, Union, Literal, Iterator, AsyncIte
 from pydantic import BaseModel, Field, PrivateAttr
 from openai import OpenAI, AsyncOpenAI
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
-
 import base64
 import mimetypes
 import asyncio
@@ -10,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from agentine.metadata import Metadata
 from agentine.utils import Utility
-from agentine.config import DEFAULT_LLM_PROVIDER
+from agentine.config import DEFAULT_LLM_PROVIDER, KNOWN_LLM_PROVIDERS
 
 
 class Message(BaseModel):
@@ -143,83 +142,65 @@ class FileMessage(Message):
         return FileMessage(text=text, files=files_list)
 
 class LLM(BaseModel):
-    class Config(BaseModel):
-        response_format: Literal["json_schema", "json_object", "text"] = Field(default="text")
-        temperature: float = Field(default=1)
-        max_retries: int = Field(default=2)
-        timeout: int = Field(default=60000)
-        max_completion_tokens: int = Field(default=None)
-        max_concurrency: int = Field(default=100)
-        reasoning_effort: Optional[Literal["low", "medium", "high"]] = Field(default=None)
+    api_key: Optional[str] = Field(default=None)
+    provider: str = Field(default=DEFAULT_LLM_PROVIDER)
+    model: Optional[str] = None
+    base_url: Optional[str] = None
 
-        def core(self) -> Dict[str, Any]:
-            included_fields = {
-                "temperature",
-                "max_completion_tokens",
-                "response_format",
-                "reasoning_effort",
-            }
-            data = self.model_dump(include=included_fields, exclude_none=True)
-            if "response_format" in data:
-                data["response_format"] = {"type": data["response_format"]}
-            return data
+    timeout: int = 60000
+    max_retries: int = 2
+    max_concurrency: int = 100
 
-    _api_key: Optional[str] = PrivateAttr(default=None)
-    _provider: Literal["openai", "groq", "gemini"] = PrivateAttr(default=DEFAULT_LLM_PROVIDER)
+    response_format: str = Field(default="text")
+    temperature: float = 1.0
+    max_completion_tokens: Optional[int] = None
+    reasoning_effort: Optional[str] = None
 
     _client: OpenAI = PrivateAttr()
     _client_async: AsyncOpenAI = PrivateAttr()
 
-    model: Optional[str] = Field(default=None)
-    config: "LLM.Config" = Field(default_factory=Config)
+    class Config:
+        extra = "allow"
 
     def __init__(self, **data: Any):
+        provider = data.get("provider", DEFAULT_LLM_PROVIDER)
+        provider_config = KNOWN_LLM_PROVIDERS.get(provider, {})
+
+        provider_models = provider_config.get("models", {})
+        default_model = provider_models.get("default")
+        default_api_key = provider_config.get("api_key")
+        default_base_url = provider_config.get("base_url")
+
+        data.setdefault("provider", provider)
+        data.setdefault("model", default_model)
+        data.setdefault("api_key", default_api_key)
+        data.setdefault("base_url", default_base_url)
+
         super().__init__(**data)
-        if 'api_key' in data:
-            self._api_key = data['api_key']
-        if 'provider' in data:
-            self._provider = data['provider']
+
         self._init_clients()
 
-    def _init_clients(self) -> None:
-        from agentine.config import LLM_PROVIDERS  # import here to avoid circular import
+    def __setattr__(self, name: str, value: Any) -> None:
+        current_value = getattr(self, name, None)
+        if current_value == value:
+            return
 
-        provider_config = LLM_PROVIDERS.get(self._provider.lower())
+        super().__setattr__(name, value)
+        special_attributes = {"provider", "api_key", "base_url"}
+        if name in special_attributes:
+            if name == "provider" and value in KNOWN_LLM_PROVIDERS:
+                provider_config = KNOWN_LLM_PROVIDERS[value]
+                provider_models = provider_config.get("models", {})
+                default_model = provider_models.get("default")
 
-        base_url = provider_config.get("base_url")
-        actual_api_key = self._api_key or provider_config.get("api_key")
-        provider_models = provider_config.get("models")
-        default_provider_model = provider_models.get("default")
-
-        if self.model is None:
-            self.model = default_provider_model
-
-        elif self.model not in provider_models.values():
-            self.model = default_provider_model
-
-        self._client = OpenAI(api_key=actual_api_key, base_url=base_url)
-        self._client_async = AsyncOpenAI(api_key=actual_api_key, base_url=base_url)
-
-    @property
-    def api_key(self):
-        return self._api_key
-
-    @api_key.setter
-    def api_key(self, value):
-        if self._api_key != value:
-            self._api_key = value
+                self.__dict__["model"] = default_model
+                self.__dict__["api_key"] = provider_config.get("api_key")
+                self.__dict__["base_url"] = provider_config.get("base_url")
             self._init_clients()
 
-    @property
-    def provider(self):
-        return self._provider
-
-    @provider.setter
-    def provider(self, value):
-        if not isinstance(value, str) or value not in ["openai", "groq", "gemini"]:
-            raise ValueError(f"Provider must be one of 'openai', 'groq', 'gemini'. Got: {value}")
-        self._provider = value
-        self._init_clients()
+    def _init_clients(self) -> None:
+        self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+        self._client_async = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
 
     @property
     def client(self) -> OpenAI:
@@ -229,47 +210,65 @@ class LLM(BaseModel):
     def client_async(self) -> AsyncOpenAI:
         return self._client_async
 
+    def completion_config(self) -> Dict[str, Any]:
+        excluded = {
+            "api_key",
+            "provider",
+            "base_url",
+            "timeout",
+            "max_retries",
+            "max_concurrency",
+        }
+        data = self.model_dump(exclude=excluded, exclude_none=True)
+        if "response_format" in data:
+            data["response_format"] = {"type": data["response_format"]}
+        return data
+
     def chat(self, messages: List["Message"]) -> "Message":
-        assert isinstance(messages, list) and all(isinstance(message, Message) for message in messages), \
-            f"messages must be a list of Message objects. Value: {messages}"
+        assert isinstance(messages, list) and all(
+            isinstance(message, Message) for message in messages
+        )
 
         openai_messages = [message.core() for message in messages]
 
-        kwargs: Dict[str, Any] = self.config.core()
+        kwargs: Dict[str, Any] = self.completion_config()
         kwargs["model"] = self.model
         kwargs["messages"] = openai_messages
 
-        for attempt in range(self.config.max_retries + 1):
+        for attempt in range(self.max_retries + 1):
             try:
                 response: ChatCompletion = self.client.chat.completions.create(**kwargs)
                 return Message.from_openai_completion(response)
             except Exception as e:
-                if attempt == self.config.max_retries:
+                if attempt == self.max_retries:
                     raise e
 
     async def chat_async(self, messages: List["Message"]) -> "Message":
-        assert isinstance(messages, list) and all(isinstance(message, Message) for message in messages), \
-            f"messages must be a list of Message objects. Value: {messages}"
+        assert isinstance(messages, list) and all(
+            isinstance(message, Message) for message in messages
+        )
 
         openai_messages = [message.core() for message in messages]
 
-        kwargs: Dict[str, Any] = self.config.core()
+        kwargs: Dict[str, Any] = self.completion_config()
         kwargs["model"] = self.model
         kwargs["messages"] = openai_messages
 
-        for attempt in range(self.config.max_retries + 1):
+        for attempt in range(self.max_retries + 1):
             try:
-                response: ChatCompletion = await self.client_async.chat.completions.create(**kwargs)
+                response: ChatCompletion = await self.client_async.chat.completions.create(
+                    **kwargs
+                )
                 return Message.from_openai_completion(response)
             except Exception as e:
-                if attempt == self.config.max_retries:
+                if attempt == self.max_retries:
                     raise e
 
     def batch(self, batch_messages: List[List["Message"]]) -> List[Union["Message", Exception]]:
         assert isinstance(batch_messages, list) and all(
             isinstance(messages, list) and all(isinstance(message, Message) for message in messages)
             for messages in batch_messages
-        ), f"batch_messages must be a list of lists of Message objects. Value: {batch_messages}"
+        )
 
         def process_message(messages: List["Message"]) -> Union["Message", Exception]:
             try:
@@ -277,15 +276,19 @@ class LLM(BaseModel):
             except Exception as e:
                 return e
 
-        with ThreadPoolExecutor(max_workers=self.config.max_concurrency) as executor:
-            results: List[Union["Message", Exception]] = list(executor.map(process_message, batch_messages))
+        with ThreadPoolExecutor(max_workers=self.max_concurrency) as executor:
+            results: List[Union["Message", Exception]] = list(
+                executor.map(process_message, batch_messages)
+            )
         return results
 
-    async def batch_async(self, batch_messages: List[List["Message"]]) -> List[Union["Message", Exception]]:
+    async def batch_async(
+        self, batch_messages: List[List["Message"]]
+    ) -> List[Union["Message", Exception]]:
         assert isinstance(batch_messages, list) and all(
             isinstance(messages, list) and all(isinstance(message, Message) for message in messages)
             for messages in batch_messages
-        ), f"batch_messages must be a list of lists of Message objects. Value: {batch_messages}"
+        )
 
         async def process_message_async(messages: List["Message"]) -> Union["Message", Exception]:
             try:
@@ -294,16 +297,19 @@ class LLM(BaseModel):
                 return e
 
         tasks = [process_message_async(messages) for messages in batch_messages]
-        results: List[Union["Message", Exception]] = await asyncio.gather(*tasks, return_exceptions=True)
+        results: List[Union["Message", Exception]] = await asyncio.gather(
+            *tasks, return_exceptions=True
+        )
         return results
-    
+
     def stream(self, messages: List["Message"]) -> Iterator["Message"]:
-        assert isinstance(messages, list) and all(isinstance(m, Message) for m in messages), \
-            f"messages must be a list of Message objects. Value: {messages}"
+        assert isinstance(messages, list) and all(
+            isinstance(m, Message) for m in messages
+        )
 
         openai_messages = [m.core() for m in messages]
 
-        kwargs = self.config.core()
+        kwargs = self.completion_config()
         kwargs["model"] = self.model
         kwargs["messages"] = openai_messages
         kwargs["stream"] = True
@@ -314,12 +320,13 @@ class LLM(BaseModel):
             yield Message.from_openai_completion_chunk(chunk)
 
     async def stream_async(self, messages: List["Message"]) -> AsyncIterator["Message"]:
-        assert isinstance(messages, list) and all(isinstance(m, Message) for m in messages), \
-            f"messages must be a list of Message objects. Value: {messages}"
+        assert isinstance(messages, list) and all(
+            isinstance(m, Message) for m in messages
+        )
 
         openai_messages = [m.core() for m in messages]
 
-        kwargs = self.config.core()
+        kwargs = self.completion_config()
         kwargs["model"] = self.model
         kwargs["messages"] = openai_messages
         kwargs["stream"] = True
@@ -328,4 +335,3 @@ class LLM(BaseModel):
 
         async for chunk in stream:
             yield Message.from_openai_completion_chunk(chunk)
-        
