@@ -16,36 +16,72 @@ pip install agentine
 
 ## Features
 
-- Agent and AgentGroup abstractions
-- Synchronous and asynchronous support
-- JSON and text response formats
-- CLI chatbot with file upload support
+- Compatible with multiple LLM providers and models
+- Supports synchronous and asynchronous calls, including streaming
+- Outputs responses as text or structured JSON
+- Switch LLM providers instantly with a single line of code
+- Easy to update configuration (provider, model, temperature, API key, etc.)
 
 ---
 
 ## Quick Start
 
-### 1. Create and use a text response agent
+> Note: agentine uses OpenAI as the default LLM provider. If you prefer another provider, see the Advanced Usage section below.
+
+### 1. Basic LLM: chat and chat_async
 
 ```python
-from agentine.agent import Agent
+from agentine.llm import LLM, Message
 
-agent = Agent(
-    instruction="You are a helpful assistant."
-)
-agent.llm.provider = "openai"
+llm = LLM(api_key="your-openai-api-key")
 
-response = agent.work("Who is the first person walking on the Moon?")
-print("Text response:", response.content)
+messages = [
+    Message(role="system", content="You are a helpful assistant."),
+    Message(role="user", content="Say hello in one short sentence."),
+]
+
+# chat (sync)
+reply = llm.chat(messages)
+print("LLM chat:", reply.content)
+
+# chat_async (async)
+import asyncio
+async def run():
+    reply_async = await llm.chat_async(messages)
+    print("LLM chat async:", reply_async.content)
+
+asyncio.run(run())
 ```
 
 ---
 
-### 2. Create and use a JSON response agent
+### 2. Basic Agent: work, stream, JSON, simple CLI chatbot
 
 ```python
 from agentine.agent import Agent
+from agentine.llm import Message
 
+agent = Agent(instruction="You are a helpful assistant.")
+agent.llm.api_key = "sk-your-openai-api-key"
+
+past_conversation = [
+    Message(role="user", content="Hello!"),
+    Message(role="assistant", content="Hi there! How can I help?"),
+]
+
+# work
+response = agent.work(
+    query="Who is the first person walking on the Moon?",
+    messages=past_conversation,
+)
+print("Agent work (text):", response.content)
+
+# stream
+for chunk in agent.stream(query="Write one short sentence about the Moon."):
+    print(chunk.content, end="")
+print()
+
+# JSON agent
 json_agent = Agent(
     instruction=(
         "You are a helpful assistant. Always respond with a JSON object "
@@ -53,27 +89,15 @@ json_agent = Agent(
     ),
     response_format="json_object"
 )
-json_agent.llm.provider = "openai"
-
+json_agent.llm.api_key = "sk-your-openai-api-key"
 json_response = json_agent.work("Who is the first person walking on the Moon?")
-print("JSON response:", json_response.data)
+print("Agent work (json):", json_response.data)
+
 ```
 
 ---
 
-### 3. Use the agent asynchronously
-
-```python
-import asyncio
-
-query = "Who is the first person walking on the Moon?"
-text_response = asyncio.run(agent.work_async(query))
-print("Async text response:", text_response.content)
-```
-
----
-
-### 4. Run the CLI chatbot
+### 3. CLI chatbot (agent as client)
 
 ```python
 from agentine.agent import Agent
@@ -87,6 +111,98 @@ agent.llm.provider = "openai"
 chatbot = Chatbot(client=agent)
 chatbot.cli_run()
 ```
+
+---
+
+## Advanced Usage
+
+### A. Async support
+
+```python
+from agentine.agent import Agent
+import asyncio
+
+agent = Agent(instruction="You are a helpful assistant.")
+agent.llm.provider = "openai"
+
+async def main():
+    # work_async
+    result = await agent.work_async("Say hello in 5 words.")
+    print(result.content)
+
+    # stream_async
+    async for chunk in agent.stream_async(query="One short sentence about Mars."):
+        print(chunk.content, end="")
+    print()
+
+asyncio.run(main())
+```
+
+---
+
+### B. Update LLM config on the fly
+
+```python
+from agentine.agent import Agent
+
+agent = Agent(instruction="You are a helpful assistant.")
+
+# Switch provider – model/api_key/base_url will auto-adjust from known provider config
+agent.llm.provider = "gemini"
+
+# Change model and sampling params on the fly
+agent.llm.model = "gemini-2.5-flash"
+agent.llm.temperature = 0.2
+
+# Optionally set API key directly (overrides env var)
+# agent.llm.api_key = "sk-..."
+
+# Use immediately
+print(agent.work("Give a 10-word haiku about oceans.").content)
+```
+
+---
+
+### C. Custom LLM config (params not built-in)
+
+agentine allows extra LLM parameters (passed through to the provider). Examples:
+
+```python
+from agentine.agent import Agent
+
+agent = Agent(instruction="You are a helpful assistant.")
+agent.llm.provider = "openai"
+
+# These fields are not predefined in LLM but are supported by many providers
+agent.llm.top_p = 0.2
+agent.llm.frequency_penalty = 0.3
+
+result = agent.work("Write a single concise sentence about the Sun.")
+print(result.content)
+```
+
+---
+
+### D. Change the default provider via `agentine.config`
+
+You can change the framework-wide default provider before creating any `LLM` or `Agent` instances:
+
+```python
+from agentine import config
+
+# Must be set BEFORE creating LLM/Agent instances
+config.DEFAULT_LLM_PROVIDER = "gemini"
+
+from agentine.llm import LLM
+
+# New instances now default to the provider above
+llm = LLM()  # defaults to Gemini now
+
+# Provide API key via env (e.g., GEMINI_API_KEY) or set programmatically
+# llm.api_key = "your-gemini-api-key"
+```
+
+This affects only newly created instances; existing ones keep their current provider.
 
 ---
 

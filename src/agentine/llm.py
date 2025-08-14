@@ -20,6 +20,9 @@ class Message(BaseModel):
     completion_stats: Optional[Dict[str, Any]] = None
     metadata: Metadata = Field(default_factory=Metadata)
 
+    class Config:
+        extra = "allow"
+
     def __setattr__(self, name: str, value: Any) -> None:
         if name != "metadata":
             old_value = getattr(self, name, None)

@@ -1,6 +1,6 @@
 import os
 
-DEFAULT_LLM_PROVIDER = "gemini"
+DEFAULT_LLM_PROVIDER = "openai"
 
 # Define API keys from environment variables
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
