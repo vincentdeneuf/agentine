@@ -18,6 +18,11 @@ class Agent(BaseModel):
         super().__init__(**data)
         self.llm.response_format = self.response_format
 
+    def __setattr__(self, key: str, value: Any) -> None:
+        super().__setattr__(key, value)
+        if key == "response_format" and hasattr(self, "llm") and self.llm is not None:
+            self.llm.response_format = value
+
     def _prepare_messages(
         self,
         query: Optional[str] = None,
