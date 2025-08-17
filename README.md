@@ -2,17 +2,11 @@
 
 agentine is a Python framework to build AI agents and chatbots using large language models (LLMs). It supports agents, groups of agents, synchronous and asynchronous calls, JSON and text responses, and includes a basic CLI chatbot.
 
----
-
 ## Installation
 
 ```bash
 pip install agentine
 ```
-
-*Note:* This package requires Python 3.8+.
-
----
 
 ## Features
 
@@ -22,11 +16,9 @@ pip install agentine
 - Switch LLM providers instantly with a single line of code
 - Easy to update configuration (provider, model, temperature, API key, etc.)
 
----
-
 ## Quick Start
 
-> Note: agentine uses OpenAI as the default LLM provider. If you prefer another provider, see the Advanced Usage section below.
+> Note: agentine uses OpenAI as the _default_ LLM provider. If you prefer another provider, see the Advanced Usage section below.
 
 ### 1. Basic LLM: chat and chat_async
 
@@ -52,8 +44,6 @@ async def run():
 
 asyncio.run(run())
 ```
-
----
 
 ### 2. Basic Agent: work, stream, JSON, simple CLI chatbot
 
@@ -95,8 +85,6 @@ print("Agent work (json):", json_response.data)
 
 ```
 
----
-
 ### 3. CLI chatbot (agent as client)
 
 ```python
@@ -112,11 +100,9 @@ chatbot = Chatbot(client=agent)
 chatbot.cli_run()
 ```
 
----
-
 ## Advanced Usage
 
-### A. Async support
+### 1. Async support
 
 ```python
 from agentine.agent import Agent
@@ -138,9 +124,7 @@ async def main():
 asyncio.run(main())
 ```
 
----
-
-### B. Update LLM config on the fly
+### 2. Update LLM config on the fly
 
 ```python
 from agentine.agent import Agent
@@ -161,9 +145,7 @@ agent.llm.temperature = 0.2
 print(agent.work("Give a 10-word haiku about oceans.").content)
 ```
 
----
-
-### C. Custom LLM config (params not built-in)
+### 3. Custom LLM config (params not built-in)
 
 agentine allows extra LLM parameters (passed through to the provider). Examples:
 
@@ -181,9 +163,7 @@ result = agent.work("Write a single concise sentence about the Sun.")
 print(result.content)
 ```
 
----
-
-### D. Change the default provider via `agentine.config`
+### 4. Change the default provider via `agentine.config`
 
 You can change the framework-wide default provider before creating any `LLM` or `Agent` instances:
 
@@ -204,8 +184,6 @@ llm = LLM()  # defaults to Gemini now
 
 This affects only newly created instances; existing ones keep their current provider.
 
----
-
 ## Configuration
 
 agentine reads API keys from environment variables by default:
@@ -217,13 +195,9 @@ agentine reads API keys from environment variables by default:
 
 You can also set API keys and providers programmatically on the agent's LLM instance.
 
----
-
 ## Contributing
 
 Contributions are welcome. Please open issues or pull requests on GitHub.
-
----
 
 ## License
 

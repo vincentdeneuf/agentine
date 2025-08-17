@@ -7,10 +7,12 @@ from agentine.utils import Utility
 
 class Agent(BaseModel):
     instruction: str
-    group_instruction: Optional[str] = None
+    name: Optional[str] = None
     llm: LLM = Field(default_factory=LLM)
-    output_label: str = "output"
     response_format: Literal["text", "json_schema", "json_object"] = Field(default="text")
+
+    class Config:
+        extra = "allow"
 
     def __init__(self, **data: Any) -> None:
         super().__init__(**data)
@@ -21,19 +23,8 @@ class Agent(BaseModel):
         query: Optional[str] = None,
         messages: Optional[List[Message]] = None,
         data: Optional[Dict[str, Any]] = None,
-        group_mode: bool = False,
     ) -> List[Message]:
-        if data is not None:
-            assert "output_label" not in data, "Agent data cannot contain reserved key 'output_label'."
-            data["output_label"] = self.output_label
-
-        selected_instruction = self.instruction
-        if group_mode and self.group_instruction:
-            selected_instruction = self.group_instruction
-
-        formatted_instruction = (
-            Utility.format(string=selected_instruction, data=data) if data else selected_instruction
-        )
+        formatted_instruction = Utility.format(string=self.instruction, data=data) if data else self.instruction
         formatted_query = Utility.format(string=query, data=data) if data else query
 
         chat_messages: List[Message] = []
@@ -52,24 +43,16 @@ class Agent(BaseModel):
         query: Optional[str] = None,
         messages: Optional[List[Message]] = None,
         data: Optional[Dict[str, Any]] = None,
-        keep_output_label: bool = False,
-        group_mode: bool = False,
     ) -> Message:
         assert query is None or isinstance(query, str), "query must be a string or None"
         assert messages is None or isinstance(messages, list), "messages must be a list or None"
         assert data is None or isinstance(data, dict), "data must be a dict or None"
 
-        chat_messages = self._prepare_messages(query=query, messages=messages, data=data, group_mode=group_mode)
-
+        chat_messages = self._prepare_messages(query=query, messages=messages, data=data)
         result = self.llm.chat(messages=chat_messages)
 
-        if self.response_format != "text":
-            parsed_data = json.loads(result.content)
-            wrapped = Utility.wrap(data=parsed_data, key=self.output_label)
-            if keep_output_label:
-                result.data = wrapped
-            else:
-                result.data = wrapped[self.output_label]
+        if self.response_format == "json_object":
+            result.data = json.loads(result.content)
 
         return result
 
@@ -78,24 +61,16 @@ class Agent(BaseModel):
         query: Optional[str] = None,
         messages: Optional[List[Message]] = None,
         data: Optional[Dict[str, Any]] = None,
-        keep_output_label: bool = False,
-        group_mode: bool = False,
     ) -> Message:
         assert query is None or isinstance(query, str), "query must be a string or None"
         assert messages is None or isinstance(messages, list), "messages must be a list or None"
         assert data is None or isinstance(data, dict), "data must be a dict or None"
 
-        chat_messages = self._prepare_messages(query=query, messages=messages, data=data, group_mode=group_mode)
-
+        chat_messages = self._prepare_messages(query=query, messages=messages, data=data)
         result = await self.llm.chat_async(messages=chat_messages)
 
-        if self.response_format != "text":
-            parsed_data = json.loads(result.content)
-            wrapped = Utility.wrap(data=parsed_data, key=self.output_label)
-            if keep_output_label:
-                result.data = wrapped
-            else:
-                result.data = wrapped[self.output_label]
+        if self.response_format == "json_object":
+            result.data = json.loads(result.content)
 
         return result
 
@@ -104,9 +79,12 @@ class Agent(BaseModel):
         query: Optional[str] = None,
         messages: Optional[List[Message]] = None,
         data: Optional[Dict[str, Any]] = None,
-        group_mode: bool = False,
     ) -> Iterator[Message]:
-        chat_messages = self._prepare_messages(query=query, messages=messages, data=data, group_mode=group_mode)
+        assert query is None or isinstance(query, str), "query must be a string or None"
+        assert messages is None or isinstance(messages, list), "messages must be a list or None"
+        assert data is None or isinstance(data, dict), "data must be a dict or None"
+
+        chat_messages = self._prepare_messages(query=query, messages=messages, data=data)
         return self.llm.stream(chat_messages)
 
     async def stream_async(
@@ -114,9 +92,12 @@ class Agent(BaseModel):
         query: Optional[str] = None,
         messages: Optional[List[Message]] = None,
         data: Optional[Dict[str, Any]] = None,
-        group_mode: bool = False,
     ) -> AsyncIterator[Message]:
-        chat_messages = self._prepare_messages(query=query, messages=messages, data=data, group_mode=group_mode)
+        assert query is None or isinstance(query, str), "query must be a string or None"
+        assert messages is None or isinstance(messages, list), "messages must be a list or None"
+        assert data is None or isinstance(data, dict), "data must be a dict or None"
+
+        chat_messages = self._prepare_messages(query=query, messages=messages, data=data)
         async for message in self.llm.stream_async(chat_messages):
             yield message
 
@@ -128,18 +109,10 @@ class AgentGroup(BaseModel):
         query: str,
         messages: Optional[List[Message]] = None,
         data: Optional[Dict[str, Any]] = None,
-        keep_output_label: bool = False,
-        group_mode: bool = False,
     ) -> List[Message]:
         results = []
         for agent in self.agents:
-            result = agent.work(
-                query=query,
-                messages=messages,
-                data=data,
-                keep_output_label=keep_output_label,
-                group_mode=group_mode
-            )
+            result = agent.work(query=query, messages=messages, data=data)
             results.append(result)
         return results
 
@@ -148,22 +121,13 @@ class AgentGroup(BaseModel):
         query: str,
         messages: Optional[List[Message]] = None,
         data: Optional[Dict[str, Any]] = None,
-        keep_output_label: bool = False,
-        group_mode: bool = False,
     ) -> List[Message]:
         tasks = [
-            agent.work_async(
-                query=query,
-                messages=messages,
-                data=data,
-                keep_output_label=keep_output_label,
-                group_mode=group_mode
-            )
+            agent.work_async(query=query, messages=messages, data=data)
             for agent in self.agents
         ]
         results = await asyncio.gather(*tasks)
         return results
-
 
 class AgentIndex(BaseModel):
     agents: Dict[str, Agent] = Field(default_factory=dict)
@@ -194,7 +158,6 @@ class AgentIndex(BaseModel):
     def find(self, names: List[str]) -> List[Agent]:
         return [agent for name in names if (agent := self.agents.get(name)) is not None]
 
-
 class AgentLegion(BaseModel):
     speaker: Agent
     selector: Agent
@@ -214,8 +177,6 @@ class AgentLegion(BaseModel):
         assert "selections" in selector_result.data, "Selector data missing 'selections' key."
 
         selections = selector_result.data["selections"]
-        Utility.print2(f"{selections}")
-
         selected_agents = self.agent_index.find(selections)
 
         if len(selected_agents) == 1:
@@ -224,15 +185,13 @@ class AgentLegion(BaseModel):
         agent_group = AgentGroup(agents=selected_agents)
 
         results = asyncio.run(
-            agent_group.work_async(query=query, messages=messages, group_mode=True)
+            agent_group.work_async(query=query, messages=messages)
         )
 
         for agent_name, result in zip(selections, results):
             result.content = (
                 f"**{agent_name} agent** response (NOT VISIBLE TO USER):\n\n{result.content}"
             )
-            Utility.print2(result.content)
-            print()
             messages.append(result)
 
         return messages, None
