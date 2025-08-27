@@ -3,12 +3,14 @@ from pydantic import BaseModel, Field
 from agentine.llm import Message, FileMessage
 from agentine.utils import Utility
 from agentine.agent import Agent
+from print9 import print9
+
 
 class Chatbot(BaseModel):
     client: Any
     messages: List[Message] = Field(default_factory=list)
 
-    def cli_run(self, stream: bool = False):
+    def cli_run(self, stream: bool = False, display_stats: bool = False):
         print("Chatbot started. Type 'exit' to quit.")
         print()
         while True:
@@ -19,7 +21,7 @@ class Chatbot(BaseModel):
 
             if query == "--upload file":
                 file_message = FileMessage.from_terminal()
-                Utility.print2(f"{len(file_message.files)} images uploaded.")
+                print9(f"{len(file_message.files)} images uploaded.")
                 text = input("YOU: ")
                 file_message.text = text
                 self.messages.append(file_message)
@@ -29,18 +31,33 @@ class Chatbot(BaseModel):
 
             if stream:
                 print()
-                print("BOT: ", end="", flush=True)
+                print9("BOT: ", end="", color="green", flush=True)
                 accumulated_content = ""
+                stats = {}
                 for chunk in self.client.stream(messages=self.messages):
                     if chunk.content is not None:
-                        Utility.print2(chunk.content, color = "green", end="", flush=True)
+                        print9(chunk.content, color="green", end="", flush=True)
                         accumulated_content += chunk.content
+                    stats = chunk.stats
+
                 print("\n")
-                full_response = Message(role="assistant", content=accumulated_content)
+                full_response = Message(
+                    role="assistant",
+                    content=accumulated_content,
+                    stats=stats,
+                )
                 self.messages.append(full_response)
+
+                if display_stats:
+                    print9(stats, color="red")
+                    print()
             else:
                 response = self.client.work(messages=self.messages)
                 self.messages.append(response)
                 print()
-                Utility.print2(f"BOT: {response.content}", color="green")
+                print9(f"BOT: {response.content}", color="green")
                 print()
+
+                if display_stats:
+                    print9(response.stats, color="red")
+                    print()

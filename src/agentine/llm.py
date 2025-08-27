@@ -7,17 +7,18 @@ import mimetypes
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
-from agentine.metadata import Metadata
+from agentine.metadata import Metadata, Stats
 from agentine.utils import Utility
 from agentine.config import DEFAULT_LLM_PROVIDER, KNOWN_LLM_PROVIDERS
+from print9 import print9
 
 
 class Message(BaseModel):
     role: Optional[Literal["system", "developer", "user", "assistant", "tool"]] = "user"
     content: Optional[Union[str, List[Dict[str, Any]]]] = None
     data: Optional[Any] = None
-    choice_stats: Optional[Dict[str, Any]] = None
-    completion_stats: Optional[Dict[str, Any]] = None
+
+    stats: Stats = Field(default_factory=Stats)
     metadata: Metadata = Field(default_factory=Metadata)
 
     class Config:
@@ -36,37 +37,42 @@ class Message(BaseModel):
         return {"role": self.role, "content": self.content}
 
     @classmethod
-    def from_openai_completion(cls, completion: ChatCompletion) -> "Message":
-        completion_dict = completion.model_dump() if hasattr(completion, "model_dump") else dict(completion)
+    def from_openai_completion(cls, completion: "ChatCompletion") -> "Message":
+        completion_dict = (
+            completion.model_dump()
+            if hasattr(completion, "model_dump")
+            else dict(completion)
+        )
         choices = completion_dict.pop("choices", [])
         choice_dict = choices[0] if choices else {}
         message = choice_dict.get("message", {})
         content = message.pop("content", "") if isinstance(message, dict) else ""
-        message.pop("role")
+        message.pop("role", None)
         role = "assistant"
 
         return cls(
             content=content,
             role=role,
-            choice_stats=choice_dict,
-            completion_stats=completion_dict,
+            stats=Stats(choice=choice_dict, completion=completion_dict),
         )
 
     @classmethod
     def from_openai_completion_chunk(cls, chunk: "ChatCompletionChunk") -> "Message":
-        chunk_dict = chunk.model_dump() if hasattr(chunk, "model_dump") else dict(chunk)
+        chunk_dict = (
+            chunk.model_dump() if hasattr(chunk, "model_dump") else dict(chunk)
+        )
+        usage = chunk.usage or None
         choices = chunk_dict.pop("choices", [])
         choice_dict = choices[0] if choices else {}
         delta = choice_dict.get("delta", {})
         content = delta.pop("content", "") if isinstance(delta, dict) else ""
-        delta.pop("role")
+        delta.pop("role", None)
         role = "assistant"
 
         message = cls(
             role=role,
             content=content,
-            choice_stats=choice_dict,
-            completion_stats=chunk_dict,
+            stats=Stats(choice=choice_dict, completion=chunk_dict, usage=usage),
         )
         message.metadata.is_chunk = True
 
@@ -227,114 +233,69 @@ class LLM(BaseModel):
             data["response_format"] = {"type": data["response_format"]}
         return data
 
-    def chat(self, messages: List["Message"]) -> "Message":
-        assert isinstance(messages, list) and all(
-            isinstance(message, Message) for message in messages
-        )
-
-        openai_messages = [message.core() for message in messages]
-
-        kwargs: Dict[str, Any] = self.completion_config()
+    def _prepare_kwargs(self, messages: List["Message"]) -> Dict[str, Any]:
+        assert isinstance(messages, list) and all(isinstance(m, Message) for m in messages)
+        kwargs = self.completion_config()
         kwargs["model"] = self.model
-        kwargs["messages"] = openai_messages
+        kwargs["messages"] = [m.core() for m in messages]
+        return kwargs
 
+    def chat(self, messages: List["Message"]) -> "Message":
+        kwargs = self._prepare_kwargs(messages)
         for attempt in range(self.max_retries + 1):
             try:
-                response: ChatCompletion = self.client.chat.completions.create(**kwargs)
+                response = self.client.chat.completions.create(**kwargs)
                 return Message.from_openai_completion(response)
-            except Exception as e:
+            except Exception:
                 if attempt == self.max_retries:
-                    raise e
+                    raise
 
     async def chat_async(self, messages: List["Message"]) -> "Message":
-        assert isinstance(messages, list) and all(
-            isinstance(message, Message) for message in messages
-        )
-
-        openai_messages = [message.core() for message in messages]
-
-        kwargs: Dict[str, Any] = self.completion_config()
-        kwargs["model"] = self.model
-        kwargs["messages"] = openai_messages
-
+        kwargs = self._prepare_kwargs(messages)
         for attempt in range(self.max_retries + 1):
             try:
-                response: ChatCompletion = await self.client_async.chat.completions.create(
-                    **kwargs
-                )
+                response = await self.client_async.chat.completions.create(**kwargs)
                 return Message.from_openai_completion(response)
-            except Exception as e:
+            except Exception:
                 if attempt == self.max_retries:
-                    raise e
+                    raise
+
+    def stream(
+        self, messages: List["Message"], include_usage: bool = True
+    ) -> Iterator["Message"]:
+        kwargs = self._prepare_kwargs(messages)
+        kwargs["stream"] = True
+        if include_usage:
+            kwargs["stream_options"] = {"include_usage": True}
+        stream = self.client.chat.completions.create(**kwargs)
+        for chunk in stream:
+            yield Message.from_openai_completion_chunk(chunk)
+
+    async def stream_async(
+        self, messages: List["Message"], include_usage: bool = True
+    ) -> AsyncIterator["Message"]:
+        kwargs = self._prepare_kwargs(messages)
+        kwargs["stream"] = True
+        if include_usage:
+            kwargs["stream_options"] = {"include_usage": True}
+        stream = await self.client_async.chat.completions.create(**kwargs)
+        async for chunk in stream:
+            yield Message.from_openai_completion_chunk(chunk)
 
     def batch(self, batch_messages: List[List["Message"]]) -> List[Union["Message", Exception]]:
-        assert isinstance(batch_messages, list) and all(
-            isinstance(messages, list) and all(isinstance(message, Message) for message in messages)
-            for messages in batch_messages
-        )
-
-        def process_message(messages: List["Message"]) -> Union["Message", Exception]:
+        def process(messages: List["Message"]) -> Union["Message", Exception]:
             try:
                 return self.chat(messages)
             except Exception as e:
                 return e
-
         with ThreadPoolExecutor(max_workers=self.max_concurrency) as executor:
-            results: List[Union["Message", Exception]] = list(
-                executor.map(process_message, batch_messages)
-            )
-        return results
+            return list(executor.map(process, batch_messages))
 
-    async def batch_async(
-        self, batch_messages: List[List["Message"]]
-    ) -> List[Union["Message", Exception]]:
-        assert isinstance(batch_messages, list) and all(
-            isinstance(messages, list) and all(isinstance(message, Message) for message in messages)
-            for messages in batch_messages
-        )
-
-        async def process_message_async(messages: List["Message"]) -> Union["Message", Exception]:
+    async def batch_async(self, batch_messages: List[List["Message"]]) -> List[Union["Message", Exception]]:
+        async def process(messages: List["Message"]) -> Union["Message", Exception]:
             try:
                 return await self.chat_async(messages)
             except Exception as e:
                 return e
+        return await asyncio.gather(*(process(m) for m in batch_messages), return_exceptions=True)
 
-        tasks = [process_message_async(messages) for messages in batch_messages]
-        results: List[Union["Message", Exception]] = await asyncio.gather(
-            *tasks, return_exceptions=True
-        )
-        return results
-
-    def stream(self, messages: List["Message"]) -> Iterator["Message"]:
-        assert isinstance(messages, list) and all(
-            isinstance(m, Message) for m in messages
-        )
-
-        openai_messages = [m.core() for m in messages]
-
-        kwargs = self.completion_config()
-        kwargs["model"] = self.model
-        kwargs["messages"] = openai_messages
-        kwargs["stream"] = True
-
-        stream = self.client.chat.completions.create(**kwargs)
-
-        for chunk in stream:
-            yield Message.from_openai_completion_chunk(chunk)
-
-    async def stream_async(self, messages: List["Message"]) -> AsyncIterator["Message"]:
-        assert isinstance(messages, list) and all(
-            isinstance(m, Message) for m in messages
-        )
-
-        openai_messages = [m.core() for m in messages]
-
-        kwargs = self.completion_config()
-        kwargs["model"] = self.model
-        kwargs["messages"] = openai_messages
-        kwargs["stream"] = True
-
-        stream = await self.client_async.chat.completions.create(**kwargs)
-
-        async for chunk in stream:
-            yield Message.from_openai_completion_chunk(chunk)

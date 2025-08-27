@@ -21,3 +21,7 @@ class Metadata(BaseModel):
 
     def log_change(self, fields: List[str]) -> None:
         self.change_logs.append(ChangeLog(fields=fields))
+
+class Stats(BaseModel):
+    class Config:
+        extra = "allow"
