@@ -6,23 +6,7 @@ from tkinter import filedialog
 from print9 import print9
 
 class Utility:
-    ANSI_COLORS = {
-        "black": "\033[30m",
-        "red": "\033[31m",
-        "green": "\033[32m",
-        "yellow": "\033[33m",
-        "blue": "\033[34m",
-        "magenta": "\033[35m",
-        "cyan": "\033[36m",
-        "white": "\033[37m",
-        "orange": "\033[38;5;208m",
-        "purple": "\033[38;5;93m",
-        "pink": "\033[38;5;205m",
-        "brown": "\033[38;5;94m",
-        "gray": "\033[90m",
-        "reset": "\033[0m",
-    }
-
+    
     @staticmethod
     def format(
         string: str,
@@ -43,30 +27,6 @@ class Utility:
             string = string.replace(f"<<{key}>>", value.strip())
 
         return string
-
-    @staticmethod
-    def print2(
-        text: str,
-        width: int = 120,
-        color: Literal[
-            "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
-            "orange", "purple", "pink", "brown", "gray"
-        ] = "orange",
-        **kwargs
-    ) -> None:
-        wrapped_lines = []
-        for line in text.splitlines():
-            wrapped = textwrap.wrap(line, width=width, replace_whitespace=False)
-            if not wrapped:
-                wrapped_lines.append("")
-            else:
-                wrapped_lines.extend(wrapped)
-
-        ansi_color = Utility.ANSI_COLORS.get(color, Utility.ANSI_COLORS["orange"])
-        reset = Utility.ANSI_COLORS["reset"]
-
-        for line in wrapped_lines:
-            print(f"{ansi_color}{line}{reset}", **kwargs)
 
     @staticmethod
     def get_file_path_via_terminal() -> Optional[str]:
