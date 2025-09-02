@@ -7,11 +7,11 @@ from agentine.llm import Message
 general_agent = Agent(
     instruction="You are a helpful assistant. Answer the user's questions clearly and concisely.",
 )
-# general_agent.llm.provider = "openai"
-general_agent.llm.provider = "gemini"
+general_agent.llm.provider = "openai"
+general_agent.llm.provider = "groq"
 # result = general_agent.work(query="hello, how are you today?", messages=[])
 # print(result)
 
 
-chatbot = Chatbot(client=general_agent)
-chatbot.cli_run(stream=True, display_stats=True)
+# chatbot = Chatbot(client=general_agent)
+# chatbot.cli_run(stream=True, display_stats=True)

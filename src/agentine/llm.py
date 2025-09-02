@@ -47,11 +47,19 @@ class LLM(BaseModel):
             self._update_clients()
 
     def _apply_provider_config(self, provider: str) -> None:
-        provider_config = KNOWN_LLM_PROVIDERS.get(str(provider).lower())
-        if provider_config:
-            super().__setattr__("model", provider_config.get("default_model"))
-            super().__setattr__("api_key", provider_config.get("api_key"))
-            super().__setattr__("base_url", provider_config.get("base_url"))
+        provider_key = str(provider).lower()
+        provider_config = KNOWN_LLM_PROVIDERS.get(provider_key)
+
+        if not provider_config:
+            raise ValueError(
+                f"422 - UNKNOWN PROVIDER: '{provider.upper()}'\n\n"
+                f"Valid providers are: {', '.join(KNOWN_LLM_PROVIDERS.keys())}\n"
+                f"If you want to use a custom provider, please set 'api_key' and 'base_url' manually instead."
+            )
+
+        super().__setattr__("model", provider_config.get("default_model"))
+        super().__setattr__("api_key", provider_config.get("api_key"))
+        super().__setattr__("base_url", provider_config.get("base_url"))
 
     def _init_clients(self) -> None:
         self._client = OpenAI(api_key=self.api_key, base_url=self.base_url)
