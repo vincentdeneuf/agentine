@@ -6,7 +6,7 @@ DEFAULT_LLM_PROVIDER = "openai"
 
 OPENAI = {
     "api_key": os.getenv("OPENAI_API_KEY", ""),
-    "base_url": None,
+    "base_url": "https://api.openai.com/v1",
     "default_model": "gpt-5-chat-latest",
 }
 

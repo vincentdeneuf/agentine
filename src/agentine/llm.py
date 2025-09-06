@@ -12,7 +12,7 @@ class LLM(BaseModel):
     api_key: Optional[str] = Field(default=None)
     provider: str = Field(default=DEFAULT_LLM_PROVIDER)
     model: Optional[str] = None
-    base_url: Optional[str] = None
+    base_url: str = ""
 
     timeout: int = 60000
     max_retries: int = 2
