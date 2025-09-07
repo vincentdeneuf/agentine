@@ -37,6 +37,7 @@ class Message(BaseModel):
             if hasattr(completion, "model_dump")
             else dict(completion)
         )
+        usage_dict = completion_dict.pop("usage", None)
         choices = completion_dict.pop("choices", [])
         choice_dict = choices[0] if choices else {}
         message = choice_dict.get("message", {})
@@ -47,26 +48,26 @@ class Message(BaseModel):
         return cls(
             content=content,
             role=role,
-            stats=Stats(choice=choice_dict, completion=completion_dict),
+            stats=Stats(choice=choice_dict, completion=completion_dict, usage=usage_dict),
         )
-
+        
     @classmethod
     def from_openai_completion_chunk(cls, chunk: Any) -> "Message":
         chunk_dict = (
             chunk.model_dump() if hasattr(chunk, "model_dump") else dict(chunk)
         )
-        usage = getattr(chunk, "usage", None)
+
+        usage_dict = chunk_dict.pop("usage", None)
         choices = chunk_dict.pop("choices", [])
         choice_dict = choices[0] if choices else {}
         delta = choice_dict.get("delta", {})
         content = delta.pop("content", "") if isinstance(delta, dict) else ""
         delta.pop("role", None)
         role = "assistant"
-
         message = cls(
             role=role,
             content=content,
-            stats=Stats(choice=choice_dict, completion=chunk_dict, usage=usage),
+            stats=Stats(choice=choice_dict, completion=chunk_dict, usage=usage_dict),
         )
         message.metadata.is_chunk = True
 
