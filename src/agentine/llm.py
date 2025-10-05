@@ -1,17 +1,17 @@
-from typing import Dict, Any, Optional, List, Union, Iterator, AsyncIterator
+from collections.abc import Iterator, AsyncIterator
 from pydantic import BaseModel, Field, PrivateAttr
 from openai import OpenAI, AsyncOpenAI
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 from agentine.config import DEFAULT_LLM_PROVIDER, KNOWN_LLM_PROVIDERS
-from agentine.message import Message, FileMessage
+from agentine.message import Message
 
 
 class LLM(BaseModel):
-    api_key: Optional[str] = Field(default=None)
+    api_key: str | None = Field(default=None)
     provider: str = Field(default=DEFAULT_LLM_PROVIDER)
-    model: Optional[str] = None
+    model: str | None = None
     base_url: str = ""
 
     timeout: int = 60000
@@ -19,9 +19,9 @@ class LLM(BaseModel):
     max_concurrency: int = 100
 
     response_format: str = Field(default="text")
-    temperature: float = 1.0
-    max_completion_tokens: Optional[int] = None
-    reasoning_effort: Optional[str] = None
+    temperature: float | None = None
+    max_completion_tokens: int | None = None
+    reasoning_effort: str | None = None
 
     _client: OpenAI = PrivateAttr()
     _client_async: AsyncOpenAI = PrivateAttr()
@@ -29,7 +29,7 @@ class LLM(BaseModel):
     class Config:
         extra = "allow"
 
-    def __init__(self, **data: Any):
+    def __init__(self, **data: object):
         if "provider" not in data:
             data["provider"] = DEFAULT_LLM_PROVIDER
 
@@ -37,7 +37,7 @@ class LLM(BaseModel):
         self._apply_provider_config(self.provider)
         self._init_clients()
 
-    def __setattr__(self, name: str, value: Any) -> None:
+    def __setattr__(self, name: str, value: object) -> None:
         super().__setattr__(name, value)
 
         if name == "provider":
@@ -79,7 +79,7 @@ class LLM(BaseModel):
     def client_async(self) -> AsyncOpenAI:
         return self._client_async
 
-    def completion_config(self) -> Dict[str, Any]:
+    def completion_config(self) -> dict[str, object]:
         excluded = {
             "api_key",
             "provider",
@@ -93,14 +93,14 @@ class LLM(BaseModel):
             data["response_format"] = {"type": data["response_format"]}
         return data
 
-    def _prepare_kwargs(self, messages: List["Message"]) -> Dict[str, Any]:
+    def _prepare_kwargs(self, messages: list[Message]) -> dict[str, object]:
         assert isinstance(messages, list) and all(isinstance(m, Message) for m in messages)
         kwargs = self.completion_config()
         kwargs["model"] = self.model
         kwargs["messages"] = [m.core() for m in messages]
         return kwargs
 
-    def chat(self, messages: List["Message"]) -> "Message":
+    def chat(self, messages: list[Message]) -> Message:
         kwargs = self._prepare_kwargs(messages)
         for attempt in range(self.max_retries + 1):
             try:
@@ -110,7 +110,7 @@ class LLM(BaseModel):
                 if attempt == self.max_retries:
                     raise
 
-    async def chat_async(self, messages: List["Message"]) -> "Message":
+    async def chat_async(self, messages: list[Message]) -> Message:
         kwargs = self._prepare_kwargs(messages)
         for attempt in range(self.max_retries + 1):
             try:
@@ -121,8 +121,8 @@ class LLM(BaseModel):
                     raise
 
     def stream(
-        self, messages: List["Message"], include_usage: bool = True
-    ) -> Iterator["Message"]:
+        self, messages: list[Message], include_usage: bool = True
+    ) -> Iterator[Message]:
         kwargs = self._prepare_kwargs(messages)
         kwargs["stream"] = True
         if include_usage:
@@ -132,8 +132,8 @@ class LLM(BaseModel):
             yield Message.from_openai_completion_chunk(chunk)
 
     async def stream_async(
-        self, messages: List["Message"], include_usage: bool = True
-    ) -> AsyncIterator["Message"]:
+        self, messages: list[Message], include_usage: bool = True
+    ) -> AsyncIterator[Message]:
         kwargs = self._prepare_kwargs(messages)
         kwargs["stream"] = True
         if include_usage:
@@ -142,8 +142,8 @@ class LLM(BaseModel):
         async for chunk in stream:
             yield Message.from_openai_completion_chunk(chunk)
 
-    def batch(self, batch_messages: List[List["Message"]]) -> List[Union["Message", Exception]]:
-        def process(messages: List["Message"]) -> Union["Message", Exception]:
+    def batch(self, batch_messages: list[list[Message]]) -> list[Message | Exception]:
+        def process(messages: list[Message]) -> Message | Exception:
             try:
                 return self.chat(messages)
             except Exception as e:
@@ -151,8 +151,8 @@ class LLM(BaseModel):
         with ThreadPoolExecutor(max_workers=self.max_concurrency) as executor:
             return list(executor.map(process, batch_messages))
 
-    async def batch_async(self, batch_messages: List[List["Message"]]) -> List[Union["Message", Exception]]:
-        async def process(messages: List["Message"]) -> Union["Message", Exception]:
+    async def batch_async(self, batch_messages: list[list[Message]]) -> list[Message | Exception]:
+        async def process(messages: list[Message]) -> Message | Exception:
             try:
                 return await self.chat_async(messages)
             except Exception as e:

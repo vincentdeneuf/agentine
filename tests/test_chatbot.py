@@ -18,4 +18,4 @@ general_agent.llm.provider = "openai"
 # print(result)
 
 chatbot = Chatbot(client=general_agent)
-chatbot.cli_run(stream=False, display_stats=True)
+chatbot.cli_run(stream=True, display_stats=True)

@@ -1,38 +1,40 @@
 import json
-from typing import AsyncIterator, Iterator, List, Optional, Dict, Any, Tuple, Literal
+from collections.abc import AsyncIterator, Iterator
+from typing import Literal
 from pydantic import BaseModel, Field
 import asyncio
 from agentine.llm import LLM, Message
 from agentine.utils import Utility
 
+
 class Agent(BaseModel):
     instruction: str
-    name: Optional[str] = None
+    name: str | None = None
     llm: LLM = Field(default_factory=LLM)
     response_format: Literal["text", "json_schema", "json_object"] = Field(default="text")
 
     class Config:
         extra = "allow"
 
-    def __init__(self, **data: Any) -> None:
+    def __init__(self, **data: object) -> None:
         super().__init__(**data)
         self.llm.response_format = self.response_format
 
-    def __setattr__(self, key: str, value: Any) -> None:
+    def __setattr__(self, key: str, value: object) -> None:
         super().__setattr__(key, value)
         if key == "response_format" and hasattr(self, "llm") and self.llm is not None:
             self.llm.response_format = value
 
     def _prepare_messages(
         self,
-        query: Optional[str] = None,
-        messages: Optional[List[Message]] = None,
-        data: Optional[Dict[str, Any]] = None,
-    ) -> List[Message]:
+        query: str | None = None,
+        messages: list[Message] | None = None,
+        data: dict[str, object] | None = None,
+    ) -> list[Message]:
         formatted_instruction = Utility.format(string=self.instruction, data=data) if data else self.instruction
         formatted_query = Utility.format(string=query, data=data) if data else query
 
-        chat_messages: List[Message] = []
+        chat_messages: list[Message] = []
 
         if formatted_instruction:
             chat_messages.append(Message(role="system", content=formatted_instruction))
@@ -45,9 +47,9 @@ class Agent(BaseModel):
 
     def work(
         self,
-        query: Optional[str] = None,
-        messages: Optional[List[Message]] = None,
-        data: Optional[Dict[str, Any]] = None,
+        query: str | None = None,
+        messages: list[Message] | None = None,
+        data: dict[str, object] | None = None,
     ) -> Message:
         assert query is None or isinstance(query, str), "query must be a string or None"
         assert messages is None or isinstance(messages, list), "messages must be a list or None"
@@ -63,9 +65,9 @@ class Agent(BaseModel):
 
     async def work_async(
         self,
-        query: Optional[str] = None,
-        messages: Optional[List[Message]] = None,
-        data: Optional[Dict[str, Any]] = None,
+        query: str | None = None,
+        messages: list[Message] | None = None,
+        data: dict[str, object] | None = None,
     ) -> Message:
         assert query is None or isinstance(query, str), "query must be a string or None"
         assert messages is None or isinstance(messages, list), "messages must be a list or None"
@@ -81,9 +83,9 @@ class Agent(BaseModel):
 
     def stream(
         self,
-        query: Optional[str] = None,
-        messages: Optional[List[Message]] = None,
-        data: Optional[Dict[str, Any]] = None,
+        query: str | None = None,
+        messages: list[Message] | None = None,
+        data: dict[str, object] | None = None,
     ) -> Iterator[Message]:
         assert query is None or isinstance(query, str), "query must be a string or None"
         assert messages is None or isinstance(messages, list), "messages must be a list or None"
@@ -94,9 +96,9 @@ class Agent(BaseModel):
 
     async def stream_async(
         self,
-        query: Optional[str] = None,
-        messages: Optional[List[Message]] = None,
-        data: Optional[Dict[str, Any]] = None,
+        query: str | None = None,
+        messages: list[Message] | None = None,
+        data: dict[str, object] | None = None,
     ) -> AsyncIterator[Message]:
         assert query is None or isinstance(query, str), "query must be a string or None"
         assert messages is None or isinstance(messages, list), "messages must be a list or None"
@@ -106,15 +108,16 @@ class Agent(BaseModel):
         async for message in self.llm.stream_async(chat_messages):
             yield message
 
+
 class AgentGroup(BaseModel):
-    agents: List[Agent] = Field(default_factory=list)
+    agents: list[Agent] = Field(default_factory=list)
 
     def work(
         self,
         query: str,
-        messages: Optional[List[Message]] = None,
-        data: Optional[Dict[str, Any]] = None,
-    ) -> List[Message]:
+        messages: list[Message] | None = None,
+        data: dict[str, object] | None = None,
+    ) -> list[Message]:
         results = []
         for agent in self.agents:
             result = agent.work(query=query, messages=messages, data=data)
@@ -124,9 +127,9 @@ class AgentGroup(BaseModel):
     async def work_async(
         self,
         query: str,
-        messages: Optional[List[Message]] = None,
-        data: Optional[Dict[str, Any]] = None,
-    ) -> List[Message]:
+        messages: list[Message] | None = None,
+        data: dict[str, object] | None = None,
+    ) -> list[Message]:
         tasks = [
             agent.work_async(query=query, messages=messages, data=data)
             for agent in self.agents
@@ -134,9 +137,10 @@ class AgentGroup(BaseModel):
         results = await asyncio.gather(*tasks)
         return results
 
+
 class AgentIndex(BaseModel):
-    agents: Dict[str, Agent] = Field(default_factory=dict)
-    default: Optional[Agent] = None
+    agents: dict[str, Agent] = Field(default_factory=dict)
+    default: Agent | None = None
 
     def __getitem__(self, key: str) -> Agent:
         return self.agents[key]
@@ -160,8 +164,9 @@ class AgentIndex(BaseModel):
             raise KeyError(f"Agent '{name}' not found in the index.")
         self.default = self.agents[name]
 
-    def find(self, names: List[str]) -> List[Agent]:
+    def find(self, names: list[str]) -> list[Agent]:
         return [agent for name in names if (agent := self.agents.get(name)) is not None]
+
 
 class AgentLegion(BaseModel):
     speaker: Agent
@@ -170,9 +175,9 @@ class AgentLegion(BaseModel):
 
     def _prepare_messages(
         self,
-        query: Optional[str] = None,
-        messages: Optional[List[Message]] = None,
-    ) -> Tuple[List[Message], Optional[Agent]]:
+        query: str | None = None,
+        messages: list[Message] | None = None,
+    ) -> tuple[list[Message], Agent | None]:
         if messages is None:
             messages = []
 
@@ -203,8 +208,8 @@ class AgentLegion(BaseModel):
 
     def work(
         self,
-        query: Optional[str] = None,
-        messages: Optional[List[Message]] = None,
+        query: str | None = None,
+        messages: list[Message] | None = None,
     ) -> Message:
         messages, single_agent = self._prepare_messages(query=query, messages=messages)
 
@@ -215,8 +220,8 @@ class AgentLegion(BaseModel):
 
     def stream(
         self,
-        query: Optional[str] = None,
-        messages: Optional[List[Message]] = None,
+        query: str | None = None,
+        messages: list[Message] | None = None,
     ) -> Iterator[Message]:
         messages, single_agent = self._prepare_messages(query=query, messages=messages)
 

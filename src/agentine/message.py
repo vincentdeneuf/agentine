@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, List, Union, Literal
+from typing import Literal, Self
 from pydantic import BaseModel, Field
 import base64
 import mimetypes
@@ -8,9 +8,9 @@ from agentine.utils import Utility
 
 
 class Message(BaseModel):
-    role: Optional[Literal["system", "developer", "user", "assistant", "tool"]] = "user"
-    content: Optional[Union[str, List[Dict[str, Any]]]] = None
-    data: Optional[Any] = None
+    role: Literal["system", "developer", "user", "assistant", "tool"] | None = "user"
+    content: str | list[dict[str, object]] | None = None
+    data: object | None = None
 
     stats: Stats = Field(default_factory=Stats)
     metadata: Metadata = Field(default_factory=Metadata)
@@ -18,7 +18,7 @@ class Message(BaseModel):
     class Config:
         extra = "allow"
 
-    def __setattr__(self, name: str, value: Any) -> None:
+    def __setattr__(self, name: str, value: object) -> None:
         if name != "metadata":
             old_value = getattr(self, name, None)
             super().__setattr__(name, value)
@@ -27,11 +27,11 @@ class Message(BaseModel):
         else:
             super().__setattr__(name, value)
 
-    def core(self) -> Dict[str, str]:
+    def core(self) -> dict[str, str]:
         return {"role": self.role, "content": self.content}
 
     @classmethod
-    def from_openai_completion(cls, completion: Any) -> "Message":
+    def from_openai_completion(cls, completion: object) -> Self:
         completion_dict = (
             completion.model_dump()
             if hasattr(completion, "model_dump")
@@ -52,7 +52,7 @@ class Message(BaseModel):
         )
         
     @classmethod
-    def from_openai_completion_chunk(cls, chunk: Any) -> "Message":
+    def from_openai_completion_chunk(cls, chunk: object) -> Self:
         chunk_dict = (
             chunk.model_dump() if hasattr(chunk, "model_dump") else dict(chunk)
         )
@@ -76,8 +76,8 @@ class Message(BaseModel):
 
 class FileMessage(Message):
     text: str = ""
-    files: List[Dict[str, Any]] = Field(default_factory=list)
-    content: List[Dict] = Field(default_factory=list)
+    files: list[dict[str, object]] = Field(default_factory=list)
+    content: list[dict] = Field(default_factory=list)
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -119,7 +119,7 @@ class FileMessage(Message):
         return {"role": self.role, "content": self.content}
 
     @staticmethod
-    def from_terminal(text: str = "") -> "FileMessage":
+    def from_terminal(text: str = "") -> Self:
         file_path = Utility.get_file_path_via_terminal()
         if not file_path:
             raise ValueError("No file selected")

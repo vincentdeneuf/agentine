@@ -1,14 +1,11 @@
-from typing import List, Any
 from pydantic import BaseModel, Field
-from agentine.llm import Message, FileMessage
-from agentine.utils import Utility
-from agentine.agent import Agent
+from agentine.message import Message, FileMessage
 from print9 import print9
 
 
 class Chatbot(BaseModel):
-    client: Any
-    messages: List[Message] = Field(default_factory=list)
+    client: object
+    messages: list[Message] = Field(default_factory=list)
 
     def cli_run(self, stream: bool = False, display_stats: bool = False):
         print("Chatbot started. Type 'exit' to quit.")

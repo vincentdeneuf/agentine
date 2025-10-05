@@ -1,16 +1,15 @@
 import re
-import textwrap
-from typing import Dict, Any, Literal, Optional, List, Union
 import tkinter as tk
 from tkinter import filedialog
 from print9 import print9
+
 
 class Utility:
     
     @staticmethod
     def format(
         string: str,
-        data: Dict[str, Any],
+        data: dict[str, object],
         fallback: str = "(Not Available)"
     ) -> str:
         assert isinstance(string, str), f"string must be a string. Value: {string!r}"
@@ -29,7 +28,7 @@ class Utility:
         return string
 
     @staticmethod
-    def get_file_path_via_terminal() -> Optional[str]:
+    def get_file_path_via_terminal() -> str | None:
         root = tk.Tk()
         root.withdraw()
         file_path = filedialog.askopenfilename()
@@ -38,9 +37,10 @@ class Utility:
             return None
         return file_path
 
+
 class ObjectService:
     @staticmethod
-    def validate_keys(data: Optional[Dict[str, Any]], keys: List[str]) -> bool:
+    def validate_keys(data: dict[str, object] | None, keys: list[str]) -> bool:
         if data is None:
             data = {}
 
@@ -51,7 +51,7 @@ class ObjectService:
         return not keys or all(key in data for key in keys)
 
     @staticmethod
-    def wrap(data: Any, key: Optional[str]) -> Union[Dict[str, Any], Any]:
+    def wrap(data: object, key: str | None) -> dict[str, object] | object:
         if not key:
             return data
 
@@ -61,6 +61,6 @@ class ObjectService:
         return {key: data}
 
     @staticmethod
-    def keys(data: Dict[Any, Any]) -> List[Any]:
+    def keys(data: dict[object, object]) -> list[object]:
         assert isinstance(data, dict), "Input object must be a dictionary"
         return list(data.keys())

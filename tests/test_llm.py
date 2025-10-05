@@ -21,26 +21,26 @@ def test_llm_switch(initial_provider: str = "openai", new_provider: str = "groq"
     print(f"Switched to provider '{new_provider}' with model '{llm.model} {llm.base_url} {llm.api_key}' in {elapsed:.4f} seconds")
     return elapsed
 
-# # Test OpenAI
-# test_llm_init("openai")
+# Test OpenAI
+test_llm_init("openai")
 
-# # Test Groq
-# test_llm_init("groq")
+# Test Groq
+test_llm_init("groq")
 
-# # Test Anthropic
-# test_llm_init("anthropic")
+# Test Anthropic
+test_llm_init("anthropic")
 
 # Switch from OpenAI to Groq
-# test_llm_switch("openai", "gemini")
+test_llm_switch("openai", "google")
 
-# # Switch from Groq to Anthropic
-# test_llm_switch("groq", "openai")
+# Switch from Groq to Anthropic
+test_llm_switch("groq", "openai")
 
-# # Switch from OpenAI to DeepSeek
-# test_llm_switch("openai", "deepseek")
+# Switch from OpenAI to DeepSeek
+test_llm_switch("openai", "deepseek")
 
-llm = LLM()
-llm.provider = "google"
-# print("New config:")
-# print(llm)
-print(llm.chat([Message(content="Who is the first person walking on the moon?")]))
+# llm = LLM()
+# llm.provider = "google"
+# # print("New config:")
+# # print(llm)
+# print(llm.chat([Message(content="Who is the first person walking on the moon?")]))
